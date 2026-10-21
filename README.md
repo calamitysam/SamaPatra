@@ -12,6 +12,8 @@ Also the frontend recieves the server address from localhost by default.
 If you are running the backend server elsewhere (like a VPS), please redirect the addrss in data/ApiClient.kt
 (    const val BASE_URL = "http://localhost:3000") change the address to your desired one.
 
+If you want some question papers I have left a sample paper in the samples folder
+
 Thanks for testing this app 
 
 Team for ProtoQuest
