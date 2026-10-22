@@ -1,5 +1,6 @@
 package com.samapatra.app.ui
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.Animatable
@@ -9,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -41,6 +44,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -51,8 +55,12 @@ import com.samapatra.app.data.ApiClient
 
 private enum class ServerStatus { Checking, Online, Offline }
 
+// Five taps on the logo, each within this many milliseconds of the one before, opens the admin door
+private const val ADMIN_TAPS = 5
+private const val ADMIN_TAP_GAP_MS = 1500L
+
 @Composable
-fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit) {
+fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit, onAdmin: () -> Unit) {
     val reduceMotion = rememberReduceMotion()
     val colors = MaterialTheme.colorScheme
 
@@ -69,6 +77,11 @@ fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit) {
         if (!reduceMotion) barProgress.animateTo(1f, tween(durationMillis = 700, delayMillis = 200))
     }
 
+    // The hidden admin door
+    var taps by remember { mutableIntStateOf(0) }
+    var lastTap by remember { mutableLongStateOf(0L) }
+    var showAdminLogin by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier.fillMaxSize().safeDrawingPadding(),
         contentAlignment = Alignment.Center,
@@ -80,7 +93,21 @@ fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit) {
                 .padding(horizontal = 24.dp, vertical = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Mark(progress = { barProgress.value })
+            Mark(
+                progress = { barProgress.value },
+                // pointerInput adds no accessibility actions, so screen readers don't announce the door
+                modifier = Modifier.pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        val now = SystemClock.elapsedRealtime()
+                        taps = if (now - lastTap <= ADMIN_TAP_GAP_MS) taps + 1 else 1
+                        lastTap = now
+                        if (taps >= ADMIN_TAPS) {
+                            taps = 0
+                            showAdminLogin = true
+                        }
+                    })
+                },
+            )
             Text(
                 text = "SamaPatra",
                 style = MaterialTheme.typography.displaySmall,
@@ -104,7 +131,7 @@ fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit) {
             Reveal(delayMillis = 300, reduceMotion = reduceMotion) {
                 RoleCard(
                     title = "I’m a student",
-                    subtitle = "Take your level check, then your paper.",
+                    subtitle = "Take your level check, then open your paper.",
                     container = colors.secondaryContainer,
                     content = colors.onSecondaryContainer,
                     onClick = onStudent,
@@ -113,14 +140,24 @@ fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit) {
             StatusRow(status = status, onRetry = { attempt++ })
         }
     }
+
+    if (showAdminLogin) {
+        AdminLoginDialog(
+            onDismiss = { showAdminLogin = false },
+            onUnlocked = {
+                showAdminLogin = false
+                onAdmin()
+            },
+        )
+    }
 }
 
 /** The logo: a paper tile with an equals sign. Sama means equal, patra means paper. */
 @Composable
-private fun Mark(progress: () -> Float) {
+private fun Mark(progress: () -> Float, modifier: Modifier = Modifier) {
     val tile = MaterialTheme.colorScheme.secondary
     val bars = MaterialTheme.colorScheme.onSecondary
-    Canvas(Modifier.size(88.dp)) {
+    Canvas(modifier.size(88.dp)) {
         drawRoundRect(color = tile, cornerRadius = CornerRadius(size.width * 0.26f))
         val barHeight = size.height * 0.1f
         val barWidth = size.width * 0.5f * progress()

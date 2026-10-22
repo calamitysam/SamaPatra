@@ -15,9 +15,13 @@ fun AppNav() {
     NavHost(navController = nav, startDestination = "welcome") {
         composable("welcome") {
             WelcomeScreen(
+                onAdmin = { nav.navigate("admin") },
                 onTeacher = { nav.navigate("teacher/auth") },
                 onStudent = { nav.navigate("student/signin") },
             )
+        }
+        composable("admin") {
+            AdminScreen(onBack = { nav.popBackStack() })
         }
         composable("teacher/auth") {
             TeacherAuthScreen(

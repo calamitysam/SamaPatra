@@ -1,7 +1,9 @@
 package com.samapatra.app.data
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -12,10 +14,52 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+/** Where the app finds the server. An admin can change it from inside the app. */
 object ApiConfig {
-    // The Android emulator reaches your laptop at 10.0.2.2.
-    // On a real tablet on the same Wi-Fi, use your laptop's IP, e.g. "http://192.168.1.5:3000".
-    const val BASE_URL = "http://localhost:3000"
+    /** Used until an admin sets another address. The Android emulator reaches your laptop at 10.0.2.2. */
+    const val DEFAULT_URL = "http://10.0.2.2:3000"
+
+    private const val PREFS = "samapatra_server"
+    private const val KEY_URL = "base_url"
+
+    @Volatile
+    var baseUrl: String = DEFAULT_URL
+        private set
+
+    /** Call once when the app starts. */
+    fun init(context: Context) {
+        val saved = context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_URL, null)
+        if (!saved.isNullOrBlank()) baseUrl = saved
+    }
+
+    fun save(context: Context, url: String) {
+        context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_URL, url).apply()
+        baseUrl = url
+    }
+
+    fun reset(context: Context) {
+        context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().remove(KEY_URL).apply()
+        baseUrl = DEFAULT_URL
+    }
+
+    /** Tidies what an admin typed. Returns null if it can't be a server address. */
+    fun clean(input: String): String? {
+        var text = input.trim()
+        if (text.isEmpty()) return null
+        if (!text.startsWith("http://", ignoreCase = true) && !text.startsWith("https://", ignoreCase = true)) {
+            text = "http://$text"
+        }
+        val url = text.toHttpUrlOrNull() ?: return null
+        val defaultPort = if (url.isHttps) 443 else 80
+        val port = if (url.port == defaultPort) "" else ":${url.port}"
+        return "${url.scheme}://${url.host}$port"
+    }
 }
 
 sealed interface ApiResult<out T> {
@@ -48,15 +92,20 @@ object ApiClient {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    /** True only if the backend answers /health with a success code. */
-    suspend fun isBackendReachable(): Boolean = withContext(Dispatchers.IO) {
+    /** True only if the server at this address answers /health with a success code. */
+    suspend fun isReachable(baseUrl: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder().url("${ApiConfig.BASE_URL}/health").build()
-            http.newCall(request).execute().use { it.isSuccessful }
+            val client = http.newBuilder().callTimeout(6, TimeUnit.SECONDS).build()
+            val request = Request.Builder().url("$baseUrl/health").build()
+            client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: IOException) {
+            false
+        } catch (e: IllegalArgumentException) {
             false
         }
     }
+
+    suspend fun isBackendReachable(): Boolean = isReachable(ApiConfig.baseUrl)
 
     suspend fun get(path: String, token: String? = null): ApiResult<JSONObject> =
         call(path, token, http) { it.get() }
@@ -98,7 +147,7 @@ object ApiClient {
         build: (Request.Builder) -> Request.Builder,
     ): ApiResult<JSONObject> = withContext(Dispatchers.IO) {
         try {
-            val builder = Request.Builder().url("${ApiConfig.BASE_URL}/api$path")
+            val builder = Request.Builder().url("${ApiConfig.baseUrl}/api$path")
             if (token != null) builder.header("Authorization", "Bearer $token")
             client.newCall(build(builder).build()).execute().use { response ->
                 val text = response.body?.string().orEmpty()
