@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import type { AIProvider, AIConfig, GenerateOptions } from './types.js';
+import type { PdfCapableProvider, AIConfig, GenerateOptions } from './types.js';
 import { withRetry, RateLimiter } from './types.js';
+import type { AIConfigValues } from './config.js';
 
 // One limiter for every Gemini call in the app, so the free-tier limit is shared.
 let sharedLimiter: RateLimiter | undefined;
@@ -17,7 +18,7 @@ function isBusy(error: unknown): boolean {
   return status === 503 || status === 429 || status === 500;
 }
 
-export class GeminiProvider implements AIProvider {
+export class GeminiProvider implements PdfCapableProvider {
   private genAI: GoogleGenerativeAI;
   private model: string;
   private fallbackModel?: string;
@@ -32,6 +33,10 @@ export class GeminiProvider implements AIProvider {
     this.maxRetries = config.maxRetries || 3;
     this.retryDelay = config.retryDelay || 1000;
     this.rateLimiter = getLimiter();
+  }
+
+  get modelName(): string {
+    return this.model;
   }
 
   /** Tries the main model, and if it stays busy, the backup model. */
@@ -112,8 +117,7 @@ export class GeminiProvider implements AIProvider {
 
   /**
    * Reads a PDF directly, as it looks on the page (maths, tables and layout kept),
-   * and returns JSON. This one is Gemini-specific. If you ever switch provider,
-   * this is the function to replace.
+   * and returns JSON.
    */
   async generateStructuredFromPdf<T>(
     pdf: Buffer,
@@ -154,27 +158,17 @@ export class GeminiProvider implements AIProvider {
   }
 }
 
-export function createGeminiProvider(): GeminiProvider {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GOOGLE_AI_API_KEY environment variable is required');
+export function createGeminiProvider(config: AIConfigValues): GeminiProvider {
+  if (!config.geminiApiKey) {
+    throw new Error('No Gemini API key is set. Add one in the admin panel (or GOOGLE_AI_API_KEY in .env).');
   }
-
-  const model = process.env.GOOGLE_AI_MODEL || 'gemini-3.5-flash';
-  const fallback = (process.env.GOOGLE_AI_FALLBACK_MODEL ?? 'gemini-3.1-flash-lite').trim();
-
   return new GeminiProvider(
     {
-      apiKey,
-      model,
+      apiKey: config.geminiApiKey,
+      model: config.geminiModel,
       maxRetries: parseInt(process.env.AI_RETRY_MAX_ATTEMPTS || '3'),
       retryDelay: parseInt(process.env.AI_RETRY_DELAY_MS || '1000'),
     },
-    fallback === '' || fallback.toLowerCase() === 'none' ? undefined : fallback
+    config.geminiFallbackModel
   );
-}
-
-// Factory function to create AI provider
-export function createAIProvider(): AIProvider {
-  return createGeminiProvider();
 }

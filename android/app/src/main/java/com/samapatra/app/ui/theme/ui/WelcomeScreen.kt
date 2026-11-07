@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -83,7 +84,7 @@ fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit, onAdmin: () -> U
     var showAdminLogin by remember { mutableStateOf(false) }
 
     Box(
-        modifier = Modifier.fillMaxSize().safeDrawingPadding(),
+        modifier = Modifier.fillMaxSize().then(backdropModifier()).safeDrawingPadding(),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -123,8 +124,10 @@ fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit, onAdmin: () -> U
                 RoleCard(
                     title = "I’m a teacher",
                     subtitle = "Set up classes, build papers and check answers.",
-                    container = colors.primaryContainer,
-                    content = colors.onPrimaryContainer,
+                    container = colors.surface.copy(alpha = 0.88f),
+                    content = colors.onSurface,
+                    pill = colors.primary,
+                    onPill = colors.onPrimary,
                     onClick = onTeacher,
                 )
             }
@@ -132,8 +135,10 @@ fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit, onAdmin: () -> U
                 RoleCard(
                     title = "I’m a student",
                     subtitle = "Take your level check, then open your paper.",
-                    container = colors.secondaryContainer,
-                    content = colors.onSecondaryContainer,
+                    container = colors.primary,
+                    content = colors.onPrimary,
+                    pill = colors.onPrimary,
+                    onPill = colors.primary,
                     onClick = onStudent,
                 )
             }
@@ -155,8 +160,9 @@ fun WelcomeScreen(onTeacher: () -> Unit, onStudent: () -> Unit, onAdmin: () -> U
 /** The logo: a paper tile with an equals sign. Sama means equal, patra means paper. */
 @Composable
 private fun Mark(progress: () -> Float, modifier: Modifier = Modifier) {
-    val tile = MaterialTheme.colorScheme.secondary
-    val bars = MaterialTheme.colorScheme.onSecondary
+    // Brand colours: always marigold yellow with ink bars, whatever the theme (matches the app icon)
+    val tile = Color(0xFFF4B13E)
+    val bars = Color(0xFF1E2A2B)
     Canvas(modifier.size(88.dp)) {
         drawRoundRect(color = tile, cornerRadius = CornerRadius(size.width * 0.26f))
         val barHeight = size.height * 0.1f
@@ -200,6 +206,8 @@ private fun RoleCard(
     subtitle: String,
     container: Color,
     content: Color,
+    pill: Color,
+    onPill: Color,
     onClick: () -> Unit,
 ) {
     Column(
@@ -207,12 +215,22 @@ private fun RoleCard(
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
             .background(container)
+            .border(1.dp, Color.White.copy(alpha = 0.5f), MaterialTheme.shapes.large)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.titleLarge, color = content)
-        Text(subtitle, style = MaterialTheme.typography.bodyLarge, color = content)
+        Text(title, style = MaterialTheme.typography.headlineMedium, color = content)
+        Text(subtitle, style = MaterialTheme.typography.bodyLarge, color = content.copy(alpha = 0.78f))
+        Spacer(Modifier.size(10.dp))
+        Box(
+            modifier = Modifier
+                .clip(PillShape)
+                .background(pill)
+                .padding(horizontal = 22.dp, vertical = 12.dp),
+        ) {
+            Text("Continue  →", style = MaterialTheme.typography.labelLarge, color = onPill)
+        }
     }
 }
 
